@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Scatter Group 1</title>
+    <script type="text/javascript" src="d3.js"></script>
+    <script type="text/javascript" src="data_util.js"></script>
+    <script type="text/javascript" src="scatter_group_1_source.js"></script>
+    <script type="text/javascript" src="scatter_group_1.js"></script>
+    <style type="text/css">
+
+        #tooltip {
+            position: absolute;
+            width: 200px;
+            height: auto;
+            padding: 10px;
+            background-color: white;
+            -webkit-border-radius: 10px;
+            -moz-border-radius: 10px;
+            border-radius: 10px;
+            -webkit-box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.4);
+            -moz-box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.4);
+            box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.4);
+            pointer-events: none;
+        }
+
+        #tooltip.hidden {
+            display: none;
+        }
+
+        #tooltip p {
+            margin: 0;
+            font-family: sans-serif;
+            font-size: 16px;
+            line-height: 20px;
+        }
+
+    </style>
+</head>
+<body>
+    <form id="x_axis_choice" class="display_choice_control">
+        <input  type="radio" value="co" name="x_axis_choice">co</input>
+        <input type="radio" value="dw" name="x_axis_choice" checked>dw</input>
+    </form>
+    <form id="group_level" class="display_choice_control">
+        <input  type="radio" value="0" name="group_level" checked>0</input>
+        <input type="radio" value="1" name="group_level">1</input>
+    </form>
+    <div id="tooltip" class="hidden">
+        <p><strong><span id="label"></span></strong></p>
+        <p><span id="detail"></span></p>
+    </div>
+    <script type="text/javascript">
+        var logToParagraphs = true
+        var logMessage = function (message) {
+            if (message != null) {
+                console.log(message);
+                if (logToParagraphs) {
+                    d3.select("body").append("p").text(message)
+                }
+            }
+        };
+
+        var width = 1000;
+        var height = 400;
+        var radiusMax = 25;
+        var padding = 30;
+        var clipPadding = 5;
+        var usableWidth = width - (padding * 2);
+        var usableHeight = height - (padding * 2);
+        // var dataset = scatterData.get0();
+        var currentXAxisChoice = "dw";
+        var currentYAxisChoice = "cap";
+        var currentGroupLevel = "0";
+
+        logMessage(`dw from ${dwMin} to ${dwMax}; co from ${coMin} to ${coMax}; cap from ${capMin} to ${capMax}; count from ${countMin} to ${countMax}`);
+
+        var xAxisChoiceControlId = "x_axis_choice";
+        var groupLevelControlId = "group_level";
+        var xAxisChoiceControl = d3.select(`#${xAxisChoiceControlId}`);
+        var groupLevelControl = d3.select(`#${groupLevelControlId}`);
+        // console.log(`xAxisChoiceControl.id = \"${xAxisChoiceControl.id}`);
+        // var groupLevelControl = d3.select("#group_level");
+
+        // var getRadioSelection = function(id) { return d3.select(`input[name="${id}"]:checked`).node().value; };
+        var getRadioSelection = function(id) { return d3.select(`input[name="${id}"]:checked`).property("value") };
+
+        var displayChoiceChanged = function() {
+            var message = null;
+            var newXAxisChoice = getRadioSelection(xAxisChoiceControlId);
+            if (newXAxisChoice !== currentXAxisChoice) {
+                currentXAxisChoice = newXAxisChoice;
+                message = `newXAxisChoice = \"${newXAxisChoice}\"`;
+            }
+            var newGroupLevel = getRadioSelection(groupLevelControlId);
+            if (newGroupLevel !== currentGroupLevel) {
+                currentGroupLevel = newGroupLevel;
+                message = `newGroupLevel = \"${newGroupLevel}\"`;
+            }
+            //ogMessage(message);
+            renderUpdate()
+        };
+
+        xAxisChoiceControl.on("change", displayChoiceChanged);
+        groupLevelControl.on("change", displayChoiceChanged);
+
+        var key = function(d) { return d.id };
+        console.log(data0);
+        console.log(data1);
+
+        var scaleXCo = d3.scaleLinear()
+            .domain([coMin, coMax])
+            .range([padding, padding + usableWidth]);
+        var scaleXDw = d3.scaleLinear()
+            .domain([dwMin, dwMax])
+            .range([padding, padding + usableWidth]);
+        var scaleYCap = d3.scaleLinear()
+            .domain([capMin, capMax])
+            .range([padding + usableHeight, padding]);
+
+        var isVisible = function(d) {
+            if (currentXAxisChoice === 'co' && isNaN(d.co)) {
+                return false
+            }
+            return (d.groupId === currentGroupLevel);
+        };
+
+        var getOpacity = function(d) {
+            if (isVisible(d)) {
+                return '1.0'
+            } else {
+                return '0.0'
+            }
+        };
+
+        var getFill = function(d) {
+            return 'blue';
+        };
+
+        var dOrParent = function(d) {
+            if (currentGroupLevel === "0" && d.groupId === "1") {
+                return d.parentItem;
+            } else {
+                return d;
+            }
+        };
+
+        var getCx = function(d) {
+            if (currentXAxisChoice === 'co' && isNaN(d.co)) {
+                return scaleXDw(d.dw);
+            }
+            var dToUse = dOrParent(d);
+            if (currentXAxisChoice === "dw") {
+                return scaleXDw(dToUse.dw);
+            } else {
+                return scaleXCo(dToUse.co);
+            }
+        };
+
+        var getCy = function(d) {
+            var dToUse = dOrParent(d);
+            return scaleYCap(dToUse.cap);
+        };
+
+        var getR = function(d) {
+            var maxValue = countMax;
+            var value = d.count;
+            if (d.groupId === "1") { value *= 10 }
+            return (Math.sqrt(value) / Math.sqrt(maxValue) ) * radiusMax
+        };
+
+        var svg = d3.select('body')
+            .append('svg')
+            .attr('width', width)
+            .attr('height', height);
+
+        svg.append('g')
+            .attr('id', 'group_clip_path')
+            .attr('clip-path', 'url(#chart-area');
+            //.append("g")
+            //.attr('id', 'group_render_0')
+            //.append("g")
+            //.attr('id', 'group_render_1');
+
+        var setAxes = function() {
+            //ogMessage("setAxes()");
+            svg.select("#axis_co")
+                .attr('opacity', function() {
+                    //ogMessage("setAxes(): #axis_co");
+                    if (currentXAxisChoice === 'co') {
+                        return '1.0'
+                    } else {
+                        return '0.0'
+                    }
+                });
+            svg.select("#axis_dw")
+                .attr('opacity', function() {
+                    //ogMessage("setAxes(): #axis_dw");
+                    if (currentXAxisChoice === 'dw') {
+                        return '1.0'
+                    } else {
+                        return '0.0'
+                    }
+                });
+            svg.select("#axis_cap")
+                .attr('opacity', function() {
+                    //ogMessage("setAxes(): #axis_cap");
+                    if (currentYAxisChoice === 'cap') {
+                        return '1.0'
+                    } else {
+                        return '0.0'
+                    }
+                });
+        };
+
+        var renderEnter = function() {
+            svg.select('#group_clip_path')
+                .selectAll('circle')
+                .data(dataAll)
+                .enter()
+                .append('circle')
+                .attr('opacity', function(d) { return getOpacity(d)} )
+                .attr('fill', function (d) { return getFill(d) } )
+                .attr('cx', function (d) { return getCx(d) } )
+                .attr('cy', function (d) { return getCy(d) } )
+                .attr('r', function (d) { return getR(d) } )
+                .on("mouseover", function(d) {
+                        //Get this bar's x/y values, then augment for the tooltip
+                        var xPosition = parseFloat(d3.select(this).attr("cx")) + 20;
+                        var yPosition = parseFloat(d3.select(this).attr("cy")) + 20;
+                        //Update the tooltip position and value
+                        d3.select("#tooltip")
+                            .style("left", xPosition + "px")
+                            .style("top", yPosition + "px")
+                            .select("#label")
+                            .text(d.nm);
+                        d3.select("#tooltip")
+                            .select("#detail")
+                            .text(d.nm);
+                        //Show the tooltip
+                        d3.select("#tooltip").classed("hidden", false);
+                    })
+                    .on("mouseout", function() {
+                        //Hide the tooltip
+                        d3.select("#tooltip").classed("hidden", true);
+                    });
+            setAxes();
+        };
+
+        var renderUpdate = function () {
+            svg.select('#group_clip_path')
+                .selectAll('circle')
+                .transition()
+                .duration(1000)
+                .attr('opacity', function(d) { return getOpacity(d)} )
+                .attr('fill', function (d) { return getFill(d) } )
+                .attr('cx', function (d) { return getCx(d) } )
+                .attr('cy', function (d) { return getCy(d) } )
+                .attr('r', function (d) { return getR(d) } );
+            setAxes();
+        };
+
+        renderEnter();
+
+        var axisXCo = d3.axisBottom()
+            .scale(scaleXCo);
+        var axisXDw = d3.axisBottom()
+            .scale(scaleXDw);
+        var axisYCap = d3.axisLeft()
+            .scale(scaleYCap);
+        svg.append('g')
+            .attr('id', 'axis_co')
+            .attr('class', 'axis')
+            .attr('transform', `translate(0, ${height - padding})`)
+            .call(axisXCo);
+        svg.append('g')
+            .attr('id', 'axis_dw')
+            .attr('class', 'axis')
+            .attr('transform', `translate(0, ${height - padding})`)
+            .call(axisXDw);
+        svg.append('g')
+            .attr('id', 'axis_cap')
+            .attr('class', 'axis')
+            .attr('transform', `translate(${padding}, 0)`)
+            .call(axisYCap);
+
+    </script>
+</body>
+</html>
